@@ -1,0 +1,1 @@
+""" Placeholder for 'global' variables we may want to use elsewhere """
