@@ -1,7 +1,12 @@
 
 # Built-in Imports
-import re, os, time, asyncio
+import re, os, time, json, asyncio
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from langchain.memory import ConversationBufferWindowMemory
+from langchain import SerpAPIWrapper, LLMChain
+from langchain.callbacks import StdOutCallbackHandler, StreamingStdOutCallbackHandler
+from langchain.agents.structured_chat.output_parser import StructuredChatOutputParserWithRetries
+from simple_agency.prompting.library import prompt_library
 
 # Langchain Imports
 from langchain.agents import BaseSingleActionAgent, BaseMultiActionAgent, AgentExecutor
@@ -15,13 +20,20 @@ from langchain.schema import (
 )
 from langchain.tools.base import BaseTool
 from langchain.utils.input import get_color_mapping
+from langchain.agents import Tool, AgentExecutor, LLMSingleActionAgent, AgentOutputParser
+from langchain.prompts import BaseChatPromptTemplate, ChatPromptTemplate
+
+from langchain import SerpAPIWrapper
+from langchain.schema import AgentAction, AgentFinish, HumanMessage, SystemMessage
 
 # PyPi Imports
 from dotenv import load_dotenv, find_dotenv
 from pydantic import BaseModel, root_validator
 
 
-class SimpleAgentExecutor(AgentExecutor):
+
+
+class CustomAgentExecutor(AgentExecutor):
     """ Our simple agent that will override the langchain executor implementation on key methods
 
     Attributes:
@@ -360,3 +372,153 @@ class SimpleAgentExecutor(AgentExecutor):
         # return 'intermediate_steps' as it is.
         else:
             return intermediate_steps
+
+def SimpleAgencyAgent(CustomAgentExecutor):
+    """Take a single step in the thought-action-observation loop.
+
+    Args:
+        name_to_tool_map (Dict[str, BaseTool]): A mapping of tool names to tool objects.
+        color_mapping (Dict[str, str]): A mapping of tools to colors, used for logging.
+        inputs (Dict[str, str]): Inputs to the agent's planning function.
+        intermediate_steps (List[Tuple[AgentAction, str]]): The history of actions and observations.
+        run_manager (Optional[CallbackManagerForChainRun]): A manager for callbacks during execution.
+
+    Returns:
+        Union[AgentFinish, List[Tuple[AgentAction, str]]]: Either an AgentFinish object if the agent is done or a list of action-observation tuples.
+    """
+    pass
+
+
+def SimpleAgent():
+    # Set up a prompt template
+    pass
+
+
+class CustomOutputParser(AgentOutputParser):
+    """
+    A custom parser for interpreting the output of an LLM system.
+    This class is a child of the `AgentOutputParser` class.
+
+    methods:
+        parse(llm_output: str) -> Union[AgentAction, AgentFinish]:
+            - Processes a string output from an LLM system and returns
+              an AgentAction or AgentFinish object based on the output content.
+    """
+
+    def parse(self, llm_output: str) -> Union[AgentAction, AgentFinish]:
+        """
+        Parses the given LLM output and returns an AgentAction or AgentFinish object.
+
+        Args:
+            llm_output (str)
+                - The output string from the LLM system.
+
+        Returns:
+            - The AgentAction or AgentFinish object based on the LLM output content.
+            - The returned value will be of type Union[AgentAction, AgentFinish]
+
+        Raises:
+            ValueError
+                - If the LLM output doesn't contain a recognizable action and action input
+        """
+
+        # Check for a 'Final Answer:' in the LLM output
+        if "Final Answer:" in llm_output:
+            # Extract everything after 'Final Answer:' and remove leading/trailing white spaces
+            final_answer = llm_output.split("Final Answer:")[-1].strip()
+
+            return AgentFinish(
+                # Return the final answer in a dictionary
+                return_values={"output": final_answer},
+                log=llm_output,
+            )
+
+        # Regular expression pattern for extracting the JSON blob between "Action:" and "```"
+        regex = r"Action:\n```\n(.*?)\n```"
+
+        # Use re.search() to find the match in the llm_output
+        match = re.search(regex, llm_output, re.DOTALL)
+
+        # If no action and action input are found, raise a ValueError
+        if not match:
+            raise ValueError(f"Could not parse LLM output: `{llm_output}`")
+
+        # Extract the JSON blob representing the action and action input
+        json_blob = match.group(1).strip()
+
+        # Parse the JSON blob to extract the action and action input
+        json_data = json.loads(json_blob)
+        action = json_data["action"].strip()
+        action_input = json_data["action_input"].strip()
+
+        # Return the action and action input in an AgentAction object
+        return AgentAction(tool=action, tool_input=action_input, log=llm_output)
+
+
+class CustomPromptTemplate(BaseChatPromptTemplate):
+
+    # The template to use
+    template: str
+
+    # The list of tools available
+    tools: List[Tool]
+
+    # Other
+    intermediary_step_str: str = "intermediate_steps"
+    observation_str: str = "Observation: "
+    post_observation_str: str = "Thought: "
+
+    def format_messages(self, **kwargs):
+        # Get the intermediate steps (AgentAction, Observation tuples)
+
+        # Format them in a particular way
+        thoughts, intermediate_steps = "", kwargs.pop(self.intermediary_step_str)
+        for i, (action, observation) in enumerate(intermediate_steps):
+            # thoughts += f"\nCYCLE {i+1}:\n"
+            thoughts += action.log
+            thoughts += f"\n{self.intermediary_step_str}: {observation}\n{self.post_observation_str}"
+
+        # Set the agent_scratchpad variable to that value
+        # print(f"\n\n\nTHOUGHTS:\n{'-'*50}", thoughts, f"\n{'-'*50}\n\n\n\n\n")
+        kwargs["agent_scratchpad"] = thoughts
+
+        # Create a tools variable from the list of tools provided
+        kwargs["tools"] = "\n".join([f"{tool.name}: {tool.description}" for tool in self.tools])
+        # kwargs["vars"] = "\n".join([f"{_var.name}: {_var.description}" for _var in self.vars])
+
+        # Create a list of tool names for the tools provided
+        kwargs["tool_names"] = ", ".join([tool.name for tool in self.tools])
+        # kwargs["var_names"] = ", ".join([_var.name for _var in self.vars])
+        formatted = self.template.format(**kwargs)
+        return [HumanMessage(content=formatted)]
+
+
+def get_simple_agent(chat_model, tools, model_name,
+                     intermediary_step_str="intermediate_steps",
+                     history_str = "chat_history",
+                     human_str="HUMAN",
+                     ai_str="ASSISTANT",
+                     input_str = "input",
+                     observation_strs=("\nObservation: ", "\nObservation: ", "\n\tObservation:")):
+
+    prompt_name = "simple_agent_v2" if "openai" in model_name else "simple_agent_llama_v1"
+    prompt = CustomPromptTemplate(
+        template=prompt_library.get_prompt(prompt_name).template,
+        tools=tools,
+        # The history template includes "history" as an input variable so we can interpolate it into the prompt
+        input_variables=[input_str, intermediary_step_str, history_str],
+    )
+    # prompt = prompt_library.get_prompt("simple_agent")
+
+    # LLM chain consisting of the LLM and a prompt
+    chat_chain = LLMChain(llm=chat_model.hf_pipe, prompt=prompt)
+    agent = LLMSingleActionAgent(
+        llm_chain=chat_chain,
+        output_parser=StructuredChatOutputParserWithRetries(),
+        stop=observation_strs,
+        allowed_tools=[x.name for x in tools],
+    )
+    memory = ConversationBufferWindowMemory(k=5, memory_key=history_str, human_prefix=human_str, ai_prefix=ai_str)
+    agent_executor = CustomAgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=True, memory=memory)
+    return agent_executor
+

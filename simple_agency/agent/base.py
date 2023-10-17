@@ -1,11 +1,4 @@
-from boiler_llm_app.backend.prompting.library import prompt_library
-from boiler_llm_app.backend.tools import (
-    llm_tools,
-    #basic_tools,
-    #api_tools,
-    #utility_tools,
-    #test_tools
-)
+from simple_agency.prompting.library import prompt_library
 
 
 class BaseAgent:
@@ -25,7 +18,4 @@ class BaseAgent:
 
     def send(self, *args, **kwargs):
         pass
-
-
-
 

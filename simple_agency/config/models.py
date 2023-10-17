@@ -1,8 +1,8 @@
 """ Placeholder for various pieces of model configuration that we want to use elsewhere """
-_OPEN_AI_MODEL_NAMES = ["gpt-4", "gpt-3.5-turbo", "gpt-3.5-turbo-16k"]
-_META_MODEL_NAMES = ["llama2-70b", "llama2-13b", "llama2-7b"]
-_ANTHROPIC_MODEL_NAMES = ["claude2"]
-_HUGGINGFACE_MODEL_NAMES = ["hf-gpt2"]
+OPEN_AI_MODEL_NAMES = ["gpt-4", "gpt-3.5-turbo", "gpt-3.5-turbo-16k"]
+META_MODEL_NAMES = ["llama2-70b", "llama2-13b", "llama2-7b"]
+ANTHROPIC_MODEL_NAMES = ["claude2"]
+HUGGINGFACE_MODEL_NAMES = ["hf-gpt2"]
 
 _HF_MODEL_NAME_MAP = {
     "chat":{

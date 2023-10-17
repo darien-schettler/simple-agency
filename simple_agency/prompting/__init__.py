@@ -1,1 +1,1 @@
-from boiler_llm_app.backend.prompting.library import prompt_library
+from simple_agency.prompting.library import prompt_library
